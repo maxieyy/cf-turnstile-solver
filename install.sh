@@ -98,16 +98,27 @@ run() { # run <label> <cmd...>
   fi
 }
 
+read_answer() { # read_answer <var> — from the terminal when one exists,
+               # empty otherwise (caller's default applies). keeps subcommands
+               # like `solver test-ip 1.2.3.4` working over non-interactive ssh
+  local __var="$1" __in=""
+  if { read -r __in; } </dev/tty 2>/dev/null; then
+    printf -v "$__var" '%s' "$__in"
+  else
+    printf -v "$__var" ''
+  fi
+}
+
 prompt_value() { # prompt_value <var> <question> <default>
   local __var="$1" __q="$2" __def="${3:-}" __in=""
   ask "$__q ${C_GREY}[${__def:-none}]${C_RESET}"
-  read -r -p "  > " __in </dev/tty || __in=""
+  read_answer __in
   printf -v "$__var" '%s' "${__in:-$__def}"
 }
 prompt_yes() { # prompt_yes <var> <question> <default y|n>
   local __var="$1" __q="$2" __def="${3:-y}" __in=""
   ask "$__q ${C_GREY}[${__def}]${C_RESET}"
-  read -r -p "  > " __in </dev/tty || __in=""
+  read_answer __in
   __in="${__in:-$__def}"
   [[ "$__in" =~ ^[Yy] ]] && printf -v "$__var" "yes" || printf -v "$__var" "no"
 }
@@ -512,8 +523,10 @@ test_health() {
 
 test_ip() {
   banner
-  local ip=""
-  prompt_value ip "IP to look up" "197.157.165.49"
+  local ip="${1:-}"
+  if [[ -z "$ip" ]]; then
+    prompt_value ip "IP to look up" "197.157.165.49"
+  fi
   step "POST /v1/ip {\"ip\":\"${ip}\"} ${C_GREY}(first hit may take ~10s: earn clearance + fetch)${C_RESET}"
   local resp
   if resp=$(curl -sf -m 90 -X POST "$(api_base)/v1/ip" -H "content-type: application/json" -H "$(auth_header)" -d "{\"ip\":\"${ip}\"}"); then
@@ -526,8 +539,10 @@ test_ip() {
 
 test_solver() {
   banner
-  local url=""
-  prompt_value url "URL to earn clearance for" "https://nowsecure.nl"
+  local url="${1:-}"
+  if [[ -z "$url" ]]; then
+    prompt_value url "URL to earn clearance for" "https://nowsecure.nl"
+  fi
   step "POST /v1/solver {\"url\":\"${url}\"} ${C_GREY}(~3-10s)${C_RESET}"
   local resp
   if resp=$(curl -sf -m 120 -X POST "$(api_base)/v1/solver" -H "content-type: application/json" -H "$(auth_header)" -d "{\"url\":\"${url}\"}"); then
@@ -616,9 +631,16 @@ action_install() {
   fi
   write_config "$db" "$token" "$force_config"
   write_systemd
+  install_cli
   wait_health || true
   setup_caddy "${domain:-IP_ONLY}"
   final_panel "$domain" "$token"
+}
+
+install_cli() { # the `solver` command — menu + all subcommands from anywhere
+  ln -sf "${INSTALL_DIR}/src/install.sh" /usr/local/bin/solver
+  chmod +x "${INSTALL_DIR}/src/install.sh"
+  ok "'solver' command installed — type it any time for the menu"
 }
 
 action_tls() {
@@ -694,6 +716,7 @@ final_panel() {
     "test from here:" \
     "  re-run this installer and pick 8 (test /v1/ip)" "" \
     "manage:" \
+    "  type 'solver' on this box → menu   ·  'solver test-ip 1.2.3.4'" \
     "  systemctl status ${SERVICE_NAME}   ·  journalctl -u ${SERVICE_NAME} -f" \
     "  re-run any time (idempotent): curl -fsSL ${REPO_URL}/raw/main/install.sh | bash"
   echo ""
@@ -717,8 +740,11 @@ action_menu() {
     echo -e "   ${C_CYAN}0${C_RESET}  self-test all endpoints   (incl. public url)"
     echo -e "   ${C_GREY}q${C_RESET}  quit"
     hr
+    echo -e "  ${C_GREY}tip: type 'solver' on this box any time; 'solver test-ip 1.2.3.4' works without a menu${C_RESET}"
+    hr
     local choice=""
-    read -r -p "  choose › " choice </dev/tty || exit 0
+    read_answer choice
+    choice="${choice:-q}"
     case "$choice" in
       1) action_install "$@" ;;
       2) action_tls ;;
@@ -744,8 +770,8 @@ case "${1:-menu}" in
   status)        shift; action_status ;;
   update)        shift; action_update ;;
   uninstall)     shift; action_uninstall ;;
-  test-ip)       shift; test_ip ;;
-  test-solver)   shift; test_solver ;;
+  test-ip)       shift; test_ip "$@" ;;
+  test-solver)   shift; test_solver "$@" ;;
   test-all)      shift; test_all ;;
   menu|"")       action_menu "$@" ;;
   *)             action_menu ;;
