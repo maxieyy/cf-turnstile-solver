@@ -1,0 +1,12 @@
+# shell scripts must be LF or bash on linux chokes
+*.sh text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.js text eol=lf
+*.json text
+Dockerfile text eol=lf
+*.md text eol=lf
+LICENSE text eol=lf
+# keep the vendored amalgamation byte-identical
+sqlite/sqlite3.c binary
+sqlite/sqlite3.h binary
