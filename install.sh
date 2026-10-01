@@ -551,15 +551,19 @@ import json, os, sys
 DIM, BRIGHT, RESET = (os.environ.get(k, "") for k in ("DIM", "BRIGHT", "RESET"))
 try:
     d = json.load(sys.stdin)
-    h = d.get("headers", {})
-    cookie = h.get("Cookie", "")
-    print(f"  {DIM}status  {RESET} : {BRIGHT}{d.get('status')}{RESET}")
-    print(f"  {DIM}elapsed {RESET} : {BRIGHT}{d.get('elapsed')}{RESET}")
-    print(f"  {DIM}egress  {RESET} : {BRIGHT}{d.get('ip')}{RESET}")
-    print(f"  {DIM}ua      {RESET} : {BRIGHT}{str(h.get('User-Agent',''))[:60]}...{RESET}")
-    print(f"  {DIM}cookie  {RESET} : {BRIGHT}{cookie[:44]}...{RESET}")
+    h = d.get("headers") or {}
+    status = d.get("status")
+    elapsed = d.get("elapsed")
+    egress = d.get("ip")
+    ua = str(h.get("User-Agent", ""))[:60]
+    cookie = str(h.get("Cookie", ""))[:44]
+    print("  %sstatus  %s : %s%s%s" % (DIM, RESET, BRIGHT, status, RESET))
+    print("  %selapsed %s : %s%s%s" % (DIM, RESET, BRIGHT, elapsed, RESET))
+    print("  %segress  %s : %s%s%s" % (DIM, RESET, BRIGHT, egress, RESET))
+    print("  %sua      %s : %s%s...%s" % (DIM, RESET, BRIGHT, ua, RESET))
+    print("  %scookie  %s : %s%s...%s" % (DIM, RESET, BRIGHT, cookie, RESET))
 except Exception:
-    pass
+    print("  (raw response could not be parsed)")
 ' <<<"$resp" 2>/dev/null || echo "  $resp"
   else
     warn "request failed — check journalctl -u ${SERVICE_NAME} -n 30"
