@@ -30,11 +30,36 @@ builds the binary, creates a **systemd** service, and puts **Caddy** in front
 for automatic HTTPS. The API itself always binds `127.0.0.1` — only Caddy
 faces the internet.
 
+**It is fully idempotent** — re-run it any time (same command); it detects the
+existing install, pulls the latest source, rebuilds if needed, and converges
+to a good state without touching your config or database. Caddy falls back to
+an official static binary when the distro package is unavailable.
+
+Menu includes **live endpoint testers** (pretty-printed): `/health` +
+`/config`, `/v1/ip` lookups, `/v1/solver` clearance runs, and a one-shot
+self-test of everything including the public URL.
+
 Non-interactive:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maxieyy/cf-turnstile-solver/main/install.sh \
-  | bash -s -- --domain api.example.com --db yes --token s3cret
+  | bash -s -- install --domain api.example.com --db yes --token s3cret
+```
+
+CLI subcommands (all idempotent):
+
+```bash
+install | tls | config | status | update | uninstall | test-ip | test-solver | test-all | menu
+```
+
+Examples:
+
+```bash
+# pull latest + rebuild + restart (the safe update)
+curl -fsSL .../install.sh | bash -s -- update
+
+# quick ip lookup from the terminal, pretty-printed
+curl -fsSL .../install.sh | bash -s -- test-ip
 ```
 
 Or run the installer's menu later:
@@ -172,6 +197,10 @@ cd cf-turnstile-solver/SOLVER
 cargo build --release --features db   # db = sqlite log + persistent cache
 CHROME_BIN=/usr/bin/google-chrome ./target/release/solver
 ```
+
+> On Windows, add `[target.x86_64-pc-windows-msvc]\nlinker = "rust-lld"` to
+> `.cargo/config.toml` if your PATH has a conflicting `link.exe` (Git's
+> coreutils), and install the VS C++ build tools or use the GNU toolchain.
 
 Without `--features db` you get the same API with no sqlite dependency and a
 smaller binary. Docker: `docker build --build-arg FEATURES=db -t solver .` (see
