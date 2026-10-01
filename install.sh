@@ -186,7 +186,11 @@ install_rust() {
 }
 
 install_chrome() {
-  if [[ -x "${INSTALL_DIR}/chrome/chrome" ]]; then ok "chrome already installed"; return; fi
+  if [[ -x "${INSTALL_DIR}/chrome/chrome" ]]; then
+    ok "chrome already installed"
+    chrome_libs   # still verify/repair runtime libs (skipping this was a bug)
+    return
+  fi
   step "fetching chrome-for-testing (~170 MB)"
   local url
   url=$(curl -fsSL --retry 3 https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json \
@@ -199,13 +203,7 @@ install_chrome() {
     && mv "${INSTALL_DIR}/chrome-linux64" "${INSTALL_DIR}/chrome" \
     && rm -f /tmp/chrome.zip
   spin_end; ok "chrome installed at ${INSTALL_DIR}/chrome"
-  detect_pkg
-  case "$PKG" in
-    apt-get) pkg_install fonts-liberation libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 libxshmfence1 libx11-xcb1 libxkbcommon0 2>/dev/null || true ;;
-    dnf|yum) pkg_install nss mesa-libgbm alsa-lib libXScrnSaver 2>/dev/null || true ;;
-    zypper)  pkg_install mozilla-nss libgbm1 alsa libX11-xcb1 2>/dev/null || true ;;
-  esac
-  ok "chrome runtime libraries"
+  chrome_libs
 }
 
 fetch_source() {
@@ -235,8 +233,41 @@ build_binary() {
   spin_end
   [[ -x "${INSTALL_DIR}/src/target/release/solver" ]] || { fail "build failed"; tail -30 /tmp/solver-install.log; }
   mkdir -p "${INSTALL_DIR}/bin"
-  cp "${INSTALL_DIR}/src/target/release/solver" "${INSTALL_DIR}/bin/solver"
+  # atomic swap: cp to a temp name then mv — mv (rename) works even while the
+  # old binary is running, cp onto it dies with "Text file busy"
+  cp "${INSTALL_DIR}/src/target/release/solver" "${INSTALL_DIR}/bin/solver.new"
+  mv -f "${INSTALL_DIR}/bin/solver.new" "${INSTALL_DIR}/bin/solver"
   ok "binary ready: ${INSTALL_DIR}/bin/solver"
+}
+
+chrome_libs() { # ensure chrome's runtime libraries (idempotent, called even
+                # when chrome itself is already installed — that was a bug)
+  detect_pkg
+  case "$PKG" in
+    apt-get)
+      local base=(fonts-liberation libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libxshmfence1 libx11-xcb1 libxkbcommon0)
+      # alsa lib is named libasound2 on some releases, libasound2t64 on others
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${base[@]}" libasound2 >/dev/null 2>&1 \
+        || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${base[@]}" libasound2t64 >/dev/null 2>&1 \
+        || { local p; for p in "${base[@]}" libasound2 libasound2t64; do
+               DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$p" >/dev/null 2>&1 || true
+             done; }
+      ;;
+    dnf|yum) "$PKG" install -y -q nss mesa-libgbm alsa-lib libXScrnSaver >/dev/null 2>&1 || true ;;
+    zypper)  zypper --non-interactive install mozilla-nss libgbm1 alsa libX11-xcb1 >/dev/null 2>&1 || true ;;
+  esac
+  # verify against the actual binary when we can
+  if [[ -x "${INSTALL_DIR}/chrome/chrome" ]]; then
+    local missing
+    missing=$(ldd "${INSTALL_DIR}/chrome/chrome" 2>/dev/null | grep -c 'not found' || true)
+    if [[ "${missing:-0}" -eq 0 ]]; then
+      ok "chrome runtime libraries verified"
+    else
+      warn "chrome still missing ${missing} libraries — solver lookups will fail until deps are installed"
+    fi
+  else
+    ok "chrome runtime libraries"
+  fi
 }
 
 # read a scalar out of /etc/solver/config.json (python3 when available)

@@ -87,7 +87,7 @@ per client IP and is configured in the same file.
 ### POST /v1/solver
 
 ```bash
-curl -X POST {{BASE_URL}}/v1/solver \
+curl -X POST https://solver.maxwell.deals/v1/solver \
   -H "content-type: application/json" \
   -d '{"url":"https://nowsecure.nl"}'
 ```
@@ -111,7 +111,7 @@ fingerprint. Proxies are supported per request: `"proxy":"http://user:pass@host:
 ### POST /v1/ip
 
 ```bash
-curl -X POST {{BASE_URL}}/v1/ip \
+curl -X POST https://solver.maxwell.deals/v1/ip \
   -H "content-type: application/json" \
   -d '{"ip":"197.157.165.49"}'
 ```
