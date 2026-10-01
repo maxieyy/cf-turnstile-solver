@@ -1,0 +1,24 @@
+[package]
+name = "solver"
+version = "1.0.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+
+[features]
+# `db` compiles the bundled sqlite amalgamation (via the system compiler in
+# build.rs) and enables the request log + persistent cache. default build
+# stays tiny and db-less.
+default = []
+db = []
+
+[[bin]]
+name = "solver"
+path = "src/main.rs"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = 3
